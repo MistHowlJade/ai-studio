@@ -10,13 +10,20 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-22.04
             artifact: AI-Studio-linux-x64
+            ext: ""
+            archive: tar.gz
+          - os: windows-2022
+            artifact: AI-Studio-windows-x64
+            ext: ".exe"
+            archive: zip
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout
@@ -28,7 +35,8 @@ jobs:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install system deps
+      - name: Install Linux system deps
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -47,13 +55,11 @@ jobs:
           pip install pytest
 
       - name: Run tests
-        run: |
-          cd $GITHUB_WORKSPACE
-          python -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -v --tb=short
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (Linux)
+        if: runner.os == 'Linux'
         run: |
-          cd $GITHUB_WORKSPACE
           pyinstaller \
             --name "AI-Studio" \
             --onefile \
@@ -80,26 +86,69 @@ jobs:
             --exclude-module torch \
             main.py
 
-      - name: Verify binary
+      - name: Build with PyInstaller (Windows)
+        if: runner.os == 'Windows'
         run: |
-          ls -lh dist/AI-Studio
-          file dist/AI-Studio
+          pyinstaller `
+            --name "AI-Studio" `
+            --onefile `
+            --windowed `
+            --add-data "src/media/workflows;src/media/workflows" `
+            --add-data "README.md;." `
+            --hidden-import PyQt6 `
+            --hidden-import PyQt6.QtCore `
+            --hidden-import PyQt6.QtGui `
+            --hidden-import PyQt6.QtWidgets `
+            --hidden-import qfluentwidgets `
+            --hidden-import qfluentwidgets.window `
+            --hidden-import qfluentwidgets.components `
+            --hidden-import yaml `
+            --hidden-import requests `
+            --hidden-import websocket `
+            --hidden-import PIL `
+            --hidden-import sqlite3 `
+            --hidden-import uuid `
+            --exclude-module tkinter `
+            --exclude-module matplotlib `
+            --exclude-module numpy `
+            --exclude-module pandas `
+            --exclude-module torch `
+            main.py
 
-      - name: Package artifact
+      - name: Verify binary
+        shell: bash
+        run: |
+          ls -lh dist/AI-Studio${{ matrix.ext }}
+          file dist/AI-Studio${{ matrix.ext }} || true
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
         run: |
           cd dist
-          mkdir -p AI-Studio-package
-          cp AI-Studio AI-Studio-package/
-          cp ../README.md AI-Studio-package/
-          cp -r ../src/media/workflows AI-Studio-package/
-          tar -czf ${{ matrix.artifact }}.tar.gz AI-Studio-package
+          mkdir -p AI-Studio
+          cp AI-Studio AI-Studio/
+          cp ../README.md AI-Studio/
+          cp -r ../src/media/workflows AI-Studio/
+          tar -czf ${{ matrix.artifact }}.tar.gz AI-Studio
           ls -lh ${{ matrix.artifact }}.tar.gz
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd dist
+          New-Item -ItemType Directory -Path AI-Studio -Force
+          Copy-Item AI-Studio.exe AI-Studio/
+          Copy-Item ../README.md AI-Studio/
+          Copy-Item -Recurse ../src/media/workflows AI-Studio/
+          Compress-Archive -Path AI-Studio -DestinationPath ${{ matrix.artifact }}.zip
+          Get-ChildItem ${{ matrix.artifact }}.zip | Select-Object Name, Length
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/${{ matrix.artifact }}.tar.gz
+          path: dist/${{ matrix.artifact }}.${{ matrix.archive }}
           retention-days: 30
 
   release:
@@ -120,17 +169,31 @@ jobs:
           body: |
             ## AI Studio ${{ github.ref_name }}
 
-            AI Studio — 桌面 AI 工作站。
+            AI Studio — 桌面 AI 工作站，集成多 AI 代理和 ComfyUI 创意工坊。
 
-            ### 安装
-            1. 下载对应平台的压缩包
-            2. 解压: `tar -xzf AI-Studio-linux-x64.tar.gz`
-            3. 运行: `./AI-Studio-package/AI-Studio`
+            ### 📥 下载
+            | 平台 | 文件 |
+            |------|------|
+            | 🐧 Linux x64 | `AI-Studio-linux-x64.tar.gz` |
+            | 🪟 Windows x64 | `AI-Studio-windows-x64.zip` |
+
+            ### 🚀 使用
+            **Linux:**
+            ```bash
+            tar -xzf AI-Studio-linux-x64.tar.gz
+            ./AI-Studio/AI-Studio
+            ```
+
+            **Windows:**
+            ```powershell
+            Expand-Archive AI-Studio-windows-x64.zip
+            .\AI-Studio\AI-Studio.exe
+            ```
 
             ### 功能
-            - 多代理对话: Hermes / OpenCode / OpenClaw
-            - ComfyUI 创意工坊 (8 个工作流)
-            - 会话持久化 + 全文搜索
+            - 多代理对话: Hermes / OpenCode / OpenClaw，并行任务队列
+            - ComfyUI 创意工坊: 8 个工作流（SDXL/Flux/Wan/AnimateDiff 等）
+            - 会话持久化: SQLite + 全文搜索
             - 启动诊断 + 日志系统
-          files: artifacts/*.tar.gz
+          files: artifacts/*.*
           generate_release_notes: true

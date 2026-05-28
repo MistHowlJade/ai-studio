@@ -1,0 +1,44 @@
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local configuration (may contain API keys)
+config.yaml
+
+# Database files (runtime artifacts)
+*.db
+*.sqlite3
+
+# Output directories
+output/
+data/
+logs/
+
+# ComfyUI local artifacts
+ComfyUI/
+*.safetensors
+*.ckpt
+*.pt
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/

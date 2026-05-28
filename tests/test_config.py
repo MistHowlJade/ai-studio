@@ -153,8 +153,8 @@ class TestConfigManager:
         """默认 config_path 指向 ~/ai-platform/config.yaml"""
         from pathlib import Path
         cm = ConfigManager()
-        assert str(cm.config_path).endswith("ai-platform/config.yaml")
-        assert "ai-platform" in str(cm.config_path)
+        expected = Path.home() / "ai-platform" / "config.yaml"
+        assert cm.config_path == expected
 
 
 if __name__ == "__main__":

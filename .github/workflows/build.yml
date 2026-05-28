@@ -1,0 +1,136 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            artifact: AI-Studio-linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 libgl1 libopengl0 \
+            libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 \
+            libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+            libxcb-shape0 libxcb-sync1 libxcb-xfixes0 \
+            libxcb-xinerama0 libxcb-xkb1 libxcb-cursor0 \
+            libxcb-dri3-0 libx11-xcb1 libglib2.0-0
+
+      - name: Install Python deps
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          cd $GITHUB_WORKSPACE
+          python -m pytest tests/ -v --tb=short
+
+      - name: Build with PyInstaller
+        run: |
+          cd $GITHUB_WORKSPACE
+          pyinstaller \
+            --name "AI-Studio" \
+            --onefile \
+            --windowed \
+            --add-data "src/media/workflows:src/media/workflows" \
+            --add-data "README.md:." \
+            --hidden-import PyQt6 \
+            --hidden-import PyQt6.QtCore \
+            --hidden-import PyQt6.QtGui \
+            --hidden-import PyQt6.QtWidgets \
+            --hidden-import qfluentwidgets \
+            --hidden-import qfluentwidgets.window \
+            --hidden-import qfluentwidgets.components \
+            --hidden-import yaml \
+            --hidden-import requests \
+            --hidden-import websocket \
+            --hidden-import PIL \
+            --hidden-import sqlite3 \
+            --hidden-import uuid \
+            --exclude-module tkinter \
+            --exclude-module matplotlib \
+            --exclude-module numpy \
+            --exclude-module pandas \
+            --exclude-module torch \
+            main.py
+
+      - name: Verify binary
+        run: |
+          ls -lh dist/AI-Studio
+          file dist/AI-Studio
+
+      - name: Package artifact
+        run: |
+          cd dist
+          mkdir -p AI-Studio-package
+          cp AI-Studio AI-Studio-package/
+          cp ../README.md AI-Studio-package/
+          cp -r ../src/media/workflows AI-Studio-package/
+          tar -czf ${{ matrix.artifact }}.tar.gz AI-Studio-package
+          ls -lh ${{ matrix.artifact }}.tar.gz
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.tar.gz
+          retention-days: 30
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "AI Studio ${{ github.ref_name }}"
+          body: |
+            ## AI Studio ${{ github.ref_name }}
+
+            AI Studio — 桌面 AI 工作站。
+
+            ### 安装
+            1. 下载对应平台的压缩包
+            2. 解压: `tar -xzf AI-Studio-linux-x64.tar.gz`
+            3. 运行: `./AI-Studio-package/AI-Studio`
+
+            ### 功能
+            - 多代理对话: Hermes / OpenCode / OpenClaw
+            - ComfyUI 创意工坊 (8 个工作流)
+            - 会话持久化 + 全文搜索
+            - 启动诊断 + 日志系统
+          files: artifacts/*.tar.gz
+          generate_release_notes: true

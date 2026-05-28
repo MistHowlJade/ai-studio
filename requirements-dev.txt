@@ -1,0 +1,10 @@
+# AI Studio — 开发/构建依赖
+# 安装: pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+# 测试
+pytest>=7.0
+
+# 打包
+pyinstaller>=6.0

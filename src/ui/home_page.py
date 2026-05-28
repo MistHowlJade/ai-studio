@@ -148,6 +148,42 @@ class HomePage(ScrollArea):
         self._poll_timer.start(10000)  # 每 10 秒
         self._poll_availability()      # 立即执行一次
 
+    # ── 诊断 ──
+
+    def set_diagnostics(self, diagnostics):
+        """应用启动诊断结果到状态卡片"""
+        agents = diagnostics["agents"]
+        card_map = {
+            "opencode": self.opencodeCard,
+            "hermes": self.hermesCard,
+            "openclaw": self.openclawCard,
+        }
+
+        for name, dep in agents.items():
+            card = card_map.get(name)
+            if not card:
+                continue
+            enabled = self.config.get(f"agents.{name}.enabled", True)
+            if not enabled:
+                card.update_status("⏸ 已禁用", "#a6adc8")
+            elif dep.available:
+                card.update_status(f"✅ 就绪 ({dep.version})", "#a6e3a1")
+            else:
+                card.update_status(f"❌ {dep.error}", "#f38ba8")
+
+        # ComfyUI
+        comfy_cli = diagnostics["comfy_cli"]
+        comfy_srv = diagnostics["comfyui_server"]
+        if comfy_srv.available:
+            self.comfyuiCard.update_status("🟢 服务运行中", "#a6e3a1")
+        elif comfy_cli.available:
+            self.comfyuiCard.update_status("⚪ CLI 已安装", "#a6adc8")
+        else:
+            self.comfyuiCard.update_status("⚠️ 未安装", "#f9e2af")
+
+        # 停止轮询（启动诊断已做初始检测）
+        # 后续轮询继续更新运行时状态
+
     # ── 轮询 ──
 
     def _poll_availability(self):

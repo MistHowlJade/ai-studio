@@ -19,8 +19,13 @@ from qfluentwidgets import (
 
 # 预置工作流映射
 WORKFLOW_REGISTRY = {
+    "🖼️  SD 1.5 文生图": "sd15_txt2img.json",
     "🖼️  SDXL 文生图": "sdxl_txt2img.json",
     "🖼️  Flux Dev 文生图": "flux_txt2img.json",
+    "🖼️  SDXL 图生图": "sdxl_img2img.json",
+    "🖌️  SDXL 局部重绘": "sdxl_inpaint.json",
+    "🔍  4x 超分辨率": "upscale_4x.json",
+    "🎥  AnimateDiff 视频": "animatediff_video.json",
     "🎥  Wan 文生视频": "wan_txt2video.json",
 }
 

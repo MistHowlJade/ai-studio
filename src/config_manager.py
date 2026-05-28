@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
         "theme": "dark",
         "font_size": 12,
         "max_history": 1000,
+        "follow_system_theme": True,
     },
 }
 

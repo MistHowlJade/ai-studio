@@ -14,6 +14,7 @@ from src.ui.comfyui_page import ComfyUIPage
 from src.ui.settings_page import SettingsPage
 from src.jobs.job_manager import JobManager
 from src.storage.session_store import SessionStore
+from src.diagnostics import run_diagnostics
 
 
 class MainWindow(FluentWindow):
@@ -27,15 +28,22 @@ class MainWindow(FluentWindow):
         self.jobManager = JobManager(max_concurrent=3)
         self.sessionStore = SessionStore()
 
+        # 启动诊断
+        self.diagnostics = run_diagnostics(config)
+
         self._init_window()
         self._create_pages()
         self._init_navigation()
         self._inject_services()
+        self._apply_diagnostics()
         self._start_live_polling()
 
-        # 系统主题监听
-        self.themeListener = SystemThemeListener(self)
-        self.themeListener.start()
+        # 系统主题监听（根据配置决定是否跟随系统）
+        if self.config.get("general.follow_system_theme", True):
+            self.themeListener = SystemThemeListener(self)
+            self.themeListener.start()
+        else:
+            self.themeListener = None
 
         self.splashScreen.finish()
 
@@ -75,6 +83,28 @@ class MainWindow(FluentWindow):
         for page in [self.opencodePage, self.hermesPage, self.openclawPage]:
             page.set_job_manager(self.jobManager)
             page.set_session_store(self.sessionStore)
+
+        # SettingsPage 获得 SessionStore（历史浏览）
+        self.settingsPage.set_session_store(self.sessionStore)
+
+    def _apply_diagnostics(self):
+        """应用诊断结果：灰显不可用代理、更新首页状态"""
+        agents = self.diagnostics["agents"]
+
+        # 灰显不可用代理的导航项
+        agent_pages = {
+            "opencode": self.opencodePage,
+            "hermes": self.hermesPage,
+            "openclaw": self.openclawPage,
+        }
+
+        for name, dep in agents.items():
+            page = agent_pages.get(name)
+            if page and not dep.available:
+                page.setEnabled(False)
+
+        # 更新首页状态卡
+        self.homePage.set_diagnostics(self.diagnostics)
 
     def _start_live_polling(self):
         """启动定时轮询"""
@@ -136,6 +166,7 @@ class MainWindow(FluentWindow):
     def closeEvent(self, e):
         self._comfy_poll.stop()
         self.sessionStore.close()
-        self.themeListener.terminate()
-        self.themeListener.deleteLater()
+        if self.themeListener is not None:
+            self.themeListener.terminate()
+            self.themeListener.deleteLater()
         super().closeEvent(e)
